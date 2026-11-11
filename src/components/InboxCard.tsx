@@ -103,7 +103,7 @@ function SortedInbox({ token, emails, viewed, onOpen }: SortedProps) {
     <>
       {!sorted && (
         <p className="card-note inbox-status" aria-live="polite">
-          {loading ? 'Sorting…' : error ? 'Couldn’t sort, showing newest first.' : ''}
+          {loading ? 'Sorting…' : error ? `${/daily ai limit/i.test(error) ? error : 'Couldn’t sort.'} Showing newest first.` : ''}
         </p>
       )}
       <ul className="headlines">

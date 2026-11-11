@@ -24,7 +24,10 @@ export function FTBriefingCard({ ft, digest }: { ft: FtState; digest: DigestStat
           ))}
         </ul>
       ) : digest.error && !digest.data ? (
-        <CardError message={`Couldn't summarise your FT newsletters. ${digest.error}`} onRetry={digest.retry} />
+        <CardError
+          message={/daily ai limit/i.test(digest.error) ? digest.error : `Couldn't summarise your FT newsletters. ${digest.error}`}
+          onRetry={digest.retry}
+        />
       ) : digest.data && !bullets ? (
         <p className="card-empty">No new FT newsletters since yesterday morning.</p>
       ) : bullets ? (

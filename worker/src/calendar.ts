@@ -97,7 +97,8 @@ function occurrences(text: string, from: Date, to: Date): { list: Occurrence[]; 
 	return { list, hasLectureEvents };
 }
 
-export async function loadCalendar(env: Env, now = new Date()): Promise<CalendarResult> {
+/** Fetch the Blackboard feed text (edge-cached 15 min). Never logs the URL. */
+async function fetchFeed(env: Env): Promise<string> {
 	const res = await fetch(env.BLACKBOARD_ICS_URL, {
 		signal: AbortSignal.timeout(15_000),
 		cf: { cacheTtl: 900, cacheEverything: true }, // Cloudflare edge cache: 15 minutes
@@ -110,18 +111,44 @@ export async function loadCalendar(env: Env, now = new Date()): Promise<Calendar
 	if (text.length > MAX_FEED_BYTES || !text.includes('BEGIN:VCALENDAR')) {
 		throw new HttpError(502, 'The Blackboard calendar feed wasn’t a valid calendar.');
 	}
+	return text;
+}
 
-	const { start: todayStart, end: todayEnd } = dublinToday(now);
-	const weekEnd = new Date(now.getTime() + 7 * DAY_MS);
-	let parsed: ReturnType<typeof occurrences>;
+function parseRange(text: string, from: Date, to: Date): ReturnType<typeof occurrences> {
 	try {
-		parsed = occurrences(text, todayStart, new Date(Math.max(weekEnd.getTime(), todayEnd.getTime())));
+		return occurrences(text, from, to);
 	} catch (err) {
 		console.error('Calendar parse failed:', err instanceof Error ? err.name : 'unknown');
 		throw new HttpError(502, 'Couldn’t read the Blackboard calendar.');
 	}
+}
 
-	const id = (o: Occurrence) => `${o.uid}@${o.start.toISOString()}`;
+const occurrenceId = (o: Occurrence) => `${o.uid}@${o.start.toISOString()}`;
+
+/** Lectures/events and deadlines overlapping [from, to) — used by the assistant's get_blackboard tool. */
+export async function blackboardRange(env: Env, from: Date, to: Date) {
+	const parsed = parseRange(await fetchFeed(env), from, to);
+	const byStart = (a: Occurrence, b: Occurrence) => a.start.getTime() - b.start.getTime();
+	return {
+		events: parsed.list
+			.filter((o) => !o.deadline)
+			.sort(byStart)
+			.map((o) => ({ title: o.title, start: o.start.toISOString(), end: o.end.toISOString(), allDay: o.allDay, location: o.location })),
+		deadlines: parsed.list
+			.filter((o) => o.deadline && o.end >= from && o.end < to)
+			.sort((a, b) => a.end.getTime() - b.end.getTime())
+			.map((o) => ({ title: o.title, due: o.end.toISOString() })),
+		feedHasLectureEvents: parsed.hasLectureEvents,
+	};
+}
+
+export async function loadCalendar(env: Env, now = new Date()): Promise<CalendarResult> {
+	const text = await fetchFeed(env);
+
+	const { start: todayStart, end: todayEnd } = dublinToday(now);
+	const weekEnd = new Date(now.getTime() + 7 * DAY_MS);
+	const parsed = parseRange(text, todayStart, new Date(Math.max(weekEnd.getTime(), todayEnd.getTime())));
+	const id = occurrenceId;
 	const today = parsed.list
 		.filter((o) => !o.deadline && o.start < todayEnd && (o.end > todayStart || o.start >= todayStart))
 		.sort((a, b) => Number(b.allDay) - Number(a.allDay) || a.start.getTime() - b.start.getTime())

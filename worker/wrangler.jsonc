@@ -11,13 +11,26 @@
 	"vars": {
 		"GOOGLE_CLIENT_ID": "507092657827-98sfdddeh39asedih4ej836r4ukf5k6u.apps.googleusercontent.com",
 		"ALLOWED_ORIGINS": "https://jhealyoconnor.github.io,http://localhost:5173",
-		// Gemini models: change these lines (no code changes needed), then `npx wrangler types`.
-		// GEMINI_MODEL is tried first; GEMINI_FALLBACK_MODEL (an older stable Flash) is used if it's
-		// still unavailable after retries. Set the fallback to "" to disable it.
-		// 3.6 Flash is the main model while 3.8 Flash is overloaded (Nov 2026); switch back when it settles.
-		"GEMINI_MODEL": "gemini-3.6-flash",
-		"GEMINI_FALLBACK_MODEL": "gemini-3.5-flash",
+		// Gemini models (free tier, Nov 2026). Change these lines, then run `npx wrangler types`.
+		// Each model has its own daily quota, reset at midnight Pacific (~8am Dublin). When a model's
+		// daily quota is used up, the Worker switches to that pair's fallback; set a fallback to "" to disable it.
+		//
+		// /triage and /ft-digest: Flash-Lite models have the biggest free daily limit (~500/day each).
+		"BULK_MODEL": "gemini-3.5-flash-lite",
+		"BULK_FALLBACK_MODEL": "gemini-3.1-flash-lite",
+		// /agent: the most reliable full Flash (~20/day free; 3.8/3.7 Flash were overloaded when chosen),
+		// then Flash-Lite, which also handles tool calling.
+		"AGENT_MODEL": "gemini-3.6-flash",
+		"AGENT_FALLBACK_MODEL": "gemini-3.5-flash-lite",
 	},
+	// Persistent cache so Gemini is asked as little as possible: triage per email (30 days) and one
+	// FT digest per day. No id: Wrangler creates the namespace on the first deploy.
+	"kv_namespaces": [
+		{
+			"binding": "CACHE",
+			"id": "7b0963f028be467ba146da1636dfc00b",
+		},
+	],
 	"dev": {
 		"port": 8787,
 	},
