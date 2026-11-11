@@ -1,0 +1,24 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "dailybrief-api",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-10-01",
+	"observability": {
+		"enabled": true,
+	},
+	// Non-secret settings. Secrets (GEMINI_API_KEY, BLACKBOARD_ICS_URL, ALLOWED_EMAIL) are set with
+	// `npx wrangler secret put …` for production and in .dev.vars (git-ignored) for local dev.
+	"vars": {
+		"GOOGLE_CLIENT_ID": "507092657827-98sfdddeh39asedih4ej836r4ukf5k6u.apps.googleusercontent.com",
+		"ALLOWED_ORIGINS": "https://jhealyoconnor.github.io,http://localhost:5173",
+		// Gemini models: change these lines (no code changes needed), then `npx wrangler types`.
+		// GEMINI_MODEL is tried first; GEMINI_FALLBACK_MODEL (an older stable Flash) is used if it's
+		// still unavailable after retries. Set the fallback to "" to disable it.
+		// 3.6 Flash is the main model while 3.8 Flash is overloaded (Nov 2026); switch back when it settles.
+		"GEMINI_MODEL": "gemini-3.6-flash",
+		"GEMINI_FALLBACK_MODEL": "gemini-3.5-flash",
+	},
+	"dev": {
+		"port": 8787,
+	},
+}
