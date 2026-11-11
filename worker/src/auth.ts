@@ -26,7 +26,7 @@ async function sha256(text: string): Promise<string> {
 
 export async function requireUser(request: Request, env: Env): Promise<string> {
 	const match = request.headers.get('Authorization')?.match(/^Bearer\s+([\w.\-~+/]+=*)$/i);
-	if (!match) throw new HttpError(401, 'Missing Google access token.');
+	if (!match) throw new HttpError(401, 'Missing Google access token.', 'signin_expired');
 	const token = match[1];
 
 	const key = await sha256(token);
@@ -40,7 +40,7 @@ export async function requireUser(request: Request, env: Env): Promise<string> {
 		headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
 		body: new URLSearchParams({ access_token: token }),
 	});
-	if (!res.ok) throw new HttpError(401, 'Google token is invalid or expired.');
+	if (!res.ok) throw new HttpError(401, 'Google token is invalid or expired.', 'signin_expired');
 	const info = (await res.json()) as TokenInfo;
 
 	const expiresIn = Number(info.expires_in);
@@ -51,7 +51,7 @@ export async function requireUser(request: Request, env: Env): Promise<string> {
 		(info.email_verified === true || info.email_verified === 'true') &&
 		email !== '' &&
 		email === env.ALLOWED_EMAIL.trim().toLowerCase();
-	if (!ok) throw new HttpError(401, 'This Google account is not allowed.');
+	if (!ok) throw new HttpError(401, 'This Google account is not allowed.', 'not_allowed');
 
 	if (verified.size > 100) verified.clear();
 	verified.set(key, { email, until: Date.now() + Math.min(CACHE_MS, expiresIn * 1000) });

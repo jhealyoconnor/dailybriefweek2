@@ -1,12 +1,10 @@
+import { isFtAddress } from '../../shared/ftClassify'
+import { extractBody, getHeader, type Header, type MessageBody, type MimePart } from '../../shared/mime'
 import { googleFetch } from './googleFetch'
 
+export { getHeader, isFtAddress, type Header, type MessageBody }
+
 export const GMAIL = 'https://gmail.googleapis.com/gmail/v1/users/me'
-
-export type Header = { name: string; value: string }
-
-export function getHeader(headers: Header[] | undefined, name: string): string {
-  return headers?.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value ?? ''
-}
 
 /** `"Jane Doe" <jane@x.com>` → { name: 'Jane Doe', address: 'jane@x.com' }. */
 export function parseAddress(from: string): { name: string; address: string } {
@@ -26,12 +24,6 @@ export function decodeEntities(text: string): string {
 
 export function gmailLink(account: string, threadId: string): string {
   return `https://mail.google.com/mail/?authuser=${encodeURIComponent(account)}#inbox/${threadId}`
-}
-
-/** True for addresses at ft.com or any subdomain (news.ft.com, email.ft.com …). */
-export function isFtAddress(address: string): boolean {
-  const domain = address.split('@')[1]?.toLowerCase() ?? ''
-  return domain === 'ft.com' || domain.endsWith('.ft.com')
 }
 
 // ---- Listing messages with their headers (format=metadata) ----
@@ -109,66 +101,13 @@ export async function loadAccountEmail(token: string, signal: AbortSignal): Prom
   return (await googleFetch<{ emailAddress: string }>(`${GMAIL}/profile`, token, signal)).emailAddress
 }
 
-// ---- Full message body (format=full) ----
-
-type Part = {
-  mimeType?: string
-  filename?: string
-  headers?: Header[]
-  body?: { size?: number; data?: string; attachmentId?: string }
-  parts?: Part[]
-}
-
-export type MessageBody = { html: string | null; text: string | null }
-
-function base64UrlToBytes(data: string): Uint8Array {
-  const b64 = data.replace(/-/g, '+').replace(/_/g, '/')
-  const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4)
-  return Uint8Array.from(atob(padded), (c) => c.charCodeAt(0))
-}
-
-function decodeText(bytes: Uint8Array, contentType: string): string {
-  const charset = contentType.match(/charset\s*=\s*"?([^";\s]+)/i)?.[1] ?? 'utf-8'
-  try {
-    return new TextDecoder(charset).decode(bytes)
-  } catch {
-    return new TextDecoder('utf-8').decode(bytes) // unknown charset label
-  }
-}
-
-/** Depth-first: first non-attachment text/html and text/plain parts in the MIME tree. */
-function findBodyParts(part: Part, found: { html?: Part; text?: Part } = {}) {
-  if (part.parts?.length) {
-    for (const child of part.parts) findBodyParts(child, found)
-    return found
-  }
-  const isAttachment = !!part.filename || /^\s*attachment/i.test(getHeader(part.headers, 'Content-Disposition'))
-  if (isAttachment) return found
-  if (part.mimeType === 'text/html' && !found.html) found.html = part
-  if (part.mimeType === 'text/plain' && !found.text) found.text = part
-  return found
-}
-
-async function readPart(messageId: string, part: Part, token: string, signal: AbortSignal): Promise<string> {
-  let data = part.body?.data
-  // Large bodies aren't inlined; Gmail stores them like an attachment.
-  if (!data && part.body?.attachmentId) {
-    const att = await googleFetch<{ data?: string }>(
-      `${GMAIL}/messages/${messageId}/attachments/${part.body.attachmentId}`,
-      token,
-      signal,
-    )
-    data = att.data
-  }
-  if (!data) return ''
-  return decodeText(base64UrlToBytes(data), getHeader(part.headers, 'Content-Type'))
-}
+// ---- Full message body (format=full); MIME decoding lives in shared/mime.ts ----
 
 /** Fetch a message's body, preferring HTML and falling back to plain text. Read-only: doesn't mark as read. */
 export async function loadMessageBody(messageId: string, token: string, signal: AbortSignal): Promise<MessageBody> {
-  const msg = await googleFetch<{ payload?: Part }>(`${GMAIL}/messages/${messageId}?format=full`, token, signal)
-  const { html, text } = msg.payload ? findBodyParts(msg.payload) : {}
-  if (html) return { html: await readPart(messageId, html, token, signal), text: null }
-  if (text) return { html: null, text: await readPart(messageId, text, token, signal) }
-  return { html: null, text: null }
+  const msg = await googleFetch<{ payload?: MimePart }>(`${GMAIL}/messages/${messageId}?format=full`, token, signal)
+  return extractBody(msg.payload, async (attachmentId) => {
+    const att = await googleFetch<{ data?: string }>(`${GMAIL}/messages/${messageId}/attachments/${attachmentId}`, token, signal)
+    return att.data
+  })
 }

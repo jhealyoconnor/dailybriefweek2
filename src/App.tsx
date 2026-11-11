@@ -1,4 +1,5 @@
 import { useGoogleAuth } from './auth/useGoogleAuth'
+import { AssistantCard } from './components/AssistantCard'
 import { CalendarCard } from './components/CalendarCard'
 import { DeadlinesCard } from './components/DeadlinesCard'
 import { FTSection } from './components/FTSection'
@@ -15,6 +16,7 @@ export default function App() {
   return (
     <main className="app">
       <Greeting />
+      {token && <AssistantCard token={token} />}
       <WeatherCard />
       {token ? (
         <>

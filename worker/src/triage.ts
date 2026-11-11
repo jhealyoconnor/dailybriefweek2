@@ -1,4 +1,4 @@
-import { generateJson } from './gemini';
+import { generateJson, geminiFor } from './gemini';
 import { HttpError } from './http';
 
 export const CATEGORIES = ['urgent', 'needs_reply', 'fyi', 'ignore'] as const;
@@ -79,15 +79,45 @@ export function validateTriage(raw: unknown, emails: EmailIn[]): TriageResult[] 
 	return emails.map((e) => byId.get(e.id)!); // input order
 }
 
-export async function triage(emails: EmailIn[], env: Env): Promise<{ results: TriageResult[]; model: string }> {
-	const { value, model } = await generateJson(
-		{ system: SYSTEM_INSTRUCTION, user: JSON.stringify({ emails }), schema: responseSchema(emails.length) },
-		env,
-	);
-	try {
-		return { results: validateTriage(value, emails), model };
-	} catch (err) {
-		console.error('Gemini output failed validation:', err instanceof Error ? err.message : 'unknown');
-		throw new HttpError(502, 'Email sorting returned an unexpected result.');
+// Each email is sorted once: results are kept in KV by message id (Gmail ids never change).
+const CACHE_TTL_S = 30 * 24 * 3600;
+const cacheKey = (id: string) => `triage:${id}`;
+type Cached = { category: Category; reason: string };
+
+export async function triage(
+	emails: EmailIn[],
+	env: Env,
+): Promise<{ results: TriageResult[]; model: string; sortedNow: number }> {
+	const cached = await Promise.all(emails.map((e) => env.CACHE.get<Cached>(cacheKey(e.id), 'json').catch(() => null)));
+	const known = new Map<string, TriageResult>();
+	emails.forEach((e, i) => {
+		const c = cached[i];
+		if (c && CATEGORIES.includes(c.category) && typeof c.reason === 'string') known.set(e.id, { id: e.id, ...c });
+	});
+	const fresh = emails.filter((e) => !known.has(e.id));
+	let model = 'cache';
+
+	if (fresh.length > 0) {
+		// Only the emails not seen before go to Gemini, in one request.
+		const out = await generateJson(
+			{ system: SYSTEM_INSTRUCTION, user: JSON.stringify({ emails: fresh }), schema: responseSchema(fresh.length) },
+			geminiFor(env, 'bulk'),
+		);
+		model = out.model;
+		let results: TriageResult[];
+		try {
+			results = validateTriage(out.value, fresh);
+		} catch (err) {
+			console.error('Gemini output failed validation:', err instanceof Error ? err.message : 'unknown');
+			throw new HttpError(502, 'Email sorting returned an unexpected result.');
+		}
+		await Promise.all(
+			results.map((r) =>
+				env.CACHE.put(cacheKey(r.id), JSON.stringify({ category: r.category, reason: r.reason }), { expirationTtl: CACHE_TTL_S }).catch(() => {}),
+			),
+		);
+		results.forEach((r) => known.set(r.id, r));
 	}
+	console.log(`triage: ${emails.length} emails, ${fresh.length} sent to Gemini`); // counts only
+	return { results: emails.map((e) => known.get(e.id)!), model, sortedNow: fresh.length };
 }

@@ -1,7 +1,8 @@
 import { workerFetch } from '../api/worker'
-import { FT_ALERT_MATCH, FT_NEWSLETTERS } from '../config'
+import { classifyFtEmail } from '../../shared/ftClassify'
+import { FT_NEWSLETTERS } from '../config'
 import { dublinYesterdayMorning, isDublinToday } from './dublinTime'
-import { isFtAddress, loadAccountEmail, loadMessageBody, mapLimit, searchEmails, type EmailSummary } from './gmail'
+import { loadAccountEmail, loadMessageBody, mapLimit, searchEmails, type EmailSummary } from './gmail'
 import { htmlToText, tidy, trimNewsletter } from './htmlText'
 
 export type FtNewsletter = { name: string; issues: EmailSummary[] } // issues newest first
@@ -15,34 +16,15 @@ export type FtData = {
 const FT_QUERY = 'from:ft.com newer_than:7d'
 const FT_MAX = 60
 
-const has = (haystack: string, needle: string) => haystack.toLowerCase().includes(needle.toLowerCase())
-
-/** Which configured newsletter an email is, by sender name or subject. */
-export function newsletterFor(email: EmailSummary): string | null {
-  for (const n of FT_NEWSLETTERS) {
-    const phrases = [n.name, ...(n.match ?? [])]
-    if (phrases.some((p) => has(email.from, p) || has(email.subject, p))) return n.name
-  }
-  return null
-}
-
-function isAlert(email: EmailSummary, subjectToo: boolean): boolean {
-  return FT_ALERT_MATCH.some(
-    (p) => has(email.from, p) || has(email.fromAddress.split('@')[0] ?? '', p) || (subjectToo && has(email.subject, p)),
-  )
-}
-
 export function classifyFt(emails: EmailSummary[]): Omit<FtData, 'account'> {
   const byName = new Map<string, EmailSummary[]>(FT_NEWSLETTERS.map((n) => [n.name, []]))
   const alerts: EmailSummary[] = []
   const other: EmailSummary[] = []
   for (const email of emails) {
-    if (!isFtAddress(email.fromAddress)) continue // the search can match look-alike senders
-    // Alert senders win (an alert can mention a newsletter's name); then newsletters; then alert subjects.
-    if (isAlert(email, false)) alerts.push(email)
-    else if (newsletterFor(email)) byName.get(newsletterFor(email)!)!.push(email)
-    else if (isAlert(email, true)) alerts.push(email)
-    else other.push(email)
+    const c = classifyFtEmail(email)
+    if (c.kind === 'alert') alerts.push(email)
+    else if (c.kind === 'newsletter') byName.get(c.name)!.push(email)
+    else if (c.kind === 'other') other.push(email)
   }
   const newest = (a: EmailSummary, b: EmailSummary) => (b.received?.getTime() ?? 0) - (a.received?.getTime() ?? 0)
   return {
@@ -73,10 +55,22 @@ export function recentIssues(data: FtData): { newsletter: string; email: EmailSu
     .slice(0, 12)
 }
 
-/** Fetch bodies, convert to trimmed plain text, and ask the Worker for the digest. */
+type DigestResponse = { briefing: FtDigest['briefing']; summaries: { id: string; summary: string }[] }
+const toDigest = (res: DigestResponse): FtDigest => ({
+  briefing: res.briefing,
+  summaries: new Map(res.summaries.map((s) => [s.id, s.summary])),
+})
+
+/**
+ * The Worker builds the digest at most once a day. Ask for today's first; only if it doesn't
+ * exist yet, fetch the newsletter bodies, convert them to trimmed plain text and send them.
+ */
 export async function loadFtDigest(data: FtData, token: string, signal: AbortSignal): Promise<FtDigest | null> {
   const recent = recentIssues(data)
   if (recent.length === 0) return null
+
+  const today = await workerFetch<Partial<DigestResponse> & { cached: boolean }>('/ft-digest', token, signal)
+  if (today.cached && today.briefing && today.summaries) return toDigest(today as DigestResponse)
 
   const issues = await mapLimit(recent, 3, async ({ newsletter, email }) => {
     const body = await loadMessageBody(email.id, token, signal)
@@ -91,11 +85,5 @@ export async function loadFtDigest(data: FtData, token: string, signal: AbortSig
   })
   const withText = issues.filter((i) => i.text)
   if (withText.length === 0) return null
-  const res = await workerFetch<{ briefing: FtDigest['briefing']; summaries: { id: string; summary: string }[] }>(
-    '/ft-digest',
-    token,
-    signal,
-    { issues: withText },
-  )
-  return { briefing: res.briefing, summaries: new Map(res.summaries.map((s) => [s.id, s.summary])) }
+  return toDigest(await workerFetch<DigestResponse>('/ft-digest', token, signal, { issues: withText }))
 }

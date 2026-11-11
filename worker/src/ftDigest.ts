@@ -1,4 +1,5 @@
-import { generateJson, type Timing } from './gemini';
+import { generateJson, geminiFor, type Timing } from './gemini';
+import { dublinDateKey } from './time';
 import { HttpError } from './http';
 
 /*
@@ -124,33 +125,39 @@ export function validateDigest(raw: unknown, issues: IssueIn[]): Digest {
 	return { briefing, summaries: issues.map((i) => ({ id: i.id, summary: byId.get(i.id)! })) };
 }
 
-// ---- Cache: keyed by the issues' message ids (emails never change) ----
-// Per Worker instance and in memory: it survives between requests while the instance is warm,
-// which covers reloads through the day. No email text is kept, only the generated digest.
+// ---- One digest per day ----
+// Stored in KV under today's Dublin date. The first request of the day that has newsletter issues
+// builds it; everything after that (app reloads, the assistant) reuses it, so Gemini is asked at most
+// once a day. Issues arriving after that are listed in the app without a summary until tomorrow.
+// Only the generated digest and the issues' id/name/subject/date are stored — no newsletter text.
 
-const CACHE_TTL_MS = 24 * 60 * 60_000;
-const cache = new Map<string, { digest: Digest; model: string; until: number }>();
+const DAY_TTL_S = 36 * 3600;
+const dayKey = (now: Date) => `ftdigest:${dublinDateKey(now)}`;
+const inflight = new Map<string, Promise<CachedDigest>>(); // same-instance requests share one build
 
-function cacheKey(issues: IssueIn[]): string {
-	return issues
-		.map((i) => i.id)
-		.sort()
-		.join(',');
+export type CachedDigest = Digest & {
+	model: string;
+	builtAt: string;
+	issues: { id: string; newsletter: string; subject: string; received: string }[];
+};
+
+/** Today's digest if it has already been built, else null. Never calls Gemini. */
+export async function todaysDigest(env: Env, now = new Date()): Promise<CachedDigest | null> {
+	return env.CACHE.get<CachedDigest>(dayKey(now), 'json').catch(() => null);
 }
 
 // Bigger prompt than triage: allow longer attempts.
 const DIGEST_TIMING: Timing = { attemptTimeoutMs: 30_000, primaryBudgetMs: 50_000, totalBudgetMs: 90_000 };
 
-export async function ftDigest(issues: IssueIn[], env: Env): Promise<Digest & { model: string; cached: boolean }> {
-	const key = cacheKey(issues);
-	const hit = cache.get(key);
-	if (hit && hit.until > Date.now()) return { ...hit.digest, model: hit.model, cached: true };
-
+async function build(issues: IssueIn[], env: Env, now: Date): Promise<CachedDigest> {
 	const user = JSON.stringify({
 		issues: issues.map(({ id, newsletter, subject, received, text }) => ({ id, newsletter, subject, received, text })),
 	});
-	const { value, model } = await generateJson({ system: SYSTEM_INSTRUCTION, user, schema: responseSchema(issues) }, env, DIGEST_TIMING);
-
+	const { value, model } = await generateJson(
+		{ system: SYSTEM_INSTRUCTION, user, schema: responseSchema(issues) },
+		geminiFor(env, 'bulk'),
+		DIGEST_TIMING,
+	);
 	let digest: Digest;
 	try {
 		digest = validateDigest(value, issues);
@@ -158,8 +165,25 @@ export async function ftDigest(issues: IssueIn[], env: Env): Promise<Digest & { 
 		console.error('FT digest failed validation:', err instanceof Error ? err.message : 'unknown');
 		throw new HttpError(502, 'The FT summary came back in an unexpected shape.');
 	}
+	const cached: CachedDigest = {
+		...digest,
+		model,
+		builtAt: now.toISOString(),
+		issues: issues.map(({ id, newsletter, subject, received }) => ({ id, newsletter, subject, received })),
+	};
+	await env.CACHE.put(dayKey(now), JSON.stringify(cached), { expirationTtl: DAY_TTL_S }).catch(() => {});
+	console.log(`ft-digest: built from ${issues.length} issues`); // counts only
+	return cached;
+}
 
-	if (cache.size >= 30) cache.delete(cache.keys().next().value!);
-	cache.set(key, { digest, model, until: Date.now() + CACHE_TTL_MS });
-	return { ...digest, model, cached: false };
+export async function ftDigest(issues: IssueIn[], env: Env, now = new Date()): Promise<CachedDigest & { cached: boolean }> {
+	const hit = await todaysDigest(env, now);
+	if (hit) return { ...hit, cached: true };
+	const key = dayKey(now);
+	let pending = inflight.get(key);
+	if (!pending) {
+		pending = build(issues, env, now).finally(() => inflight.delete(key));
+		inflight.set(key, pending);
+	}
+	return { ...(await pending), cached: false };
 }

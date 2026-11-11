@@ -1,6 +1,7 @@
+import { parseAgentInput, runAgent } from './agent/agent';
 import { requireUser } from './auth';
 import { loadCalendar } from './calendar';
-import { ftDigest, parseDigestInput } from './ftDigest';
+import { ftDigest, parseDigestInput, todaysDigest } from './ftDigest';
 import { HttpError, json } from './http';
 import { parseTriageInput, triage } from './triage';
 
@@ -33,7 +34,9 @@ async function readJson(request: Request, maxBytes: number): Promise<unknown> {
 const ROUTES: Record<string, string> = {
 	'GET /calendar': 'calendar',
 	'POST /triage': 'triage',
+	'GET /ft-digest': 'ftDigestCached',
 	'POST /ft-digest': 'ftDigest',
+	'POST /agent': 'agent',
 };
 
 async function route(request: Request, env: Env): Promise<Response> {
@@ -49,6 +52,17 @@ async function route(request: Request, env: Env): Promise<Response> {
 	switch (name) {
 		case 'calendar':
 			return json(await loadCalendar(env), 200);
+		case 'agent': {
+			// The tools read Gmail/Calendar with the same token that requireUser just verified.
+			const token = request.headers.get('Authorization')!.replace(/^Bearer\s+/i, '');
+			const messages = parseAgentInput(await readJson(request, MAX_TRIAGE_BODY));
+			return json(await runAgent(messages, { env, token, now: new Date() }), 200);
+		}
+		case 'ftDigestCached': {
+			// Lets the app skip downloading newsletter bodies when today's digest already exists.
+			const digest = await todaysDigest(env);
+			return json(digest ? { ...digest, cached: true } : { cached: false }, 200);
+		}
 		case 'triage':
 			return json(await triage(parseTriageInput(await readJson(request, MAX_TRIAGE_BODY)), env), 200);
 		default:
@@ -67,7 +81,7 @@ export default {
 			for (const [k, v] of Object.entries(cors)) res.headers.set(k, v);
 			return res;
 		} catch (err) {
-			if (err instanceof HttpError) return json({ error: err.message }, err.status, cors);
+			if (err instanceof HttpError) return json({ error: err.message, ...(err.code ? { code: err.code } : {}) }, err.status, cors);
 			console.error('Unhandled error:', err instanceof Error ? err.name : 'unknown');
 			return json({ error: 'Something went wrong.' }, 500, cors);
 		}
