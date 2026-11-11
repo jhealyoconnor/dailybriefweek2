@@ -1,0 +1,5 @@
+# Copy to .dev.vars (git-ignored) and fill in for local `npx wrangler dev`.
+# Never commit .dev.vars. Production values are set with `npx wrangler secret put <NAME>`.
+GEMINI_API_KEY=
+BLACKBOARD_ICS_URL=
+ALLOWED_EMAIL=

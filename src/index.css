@@ -256,12 +256,9 @@ ul {
   list-style: none;
   margin: 0 -20px -18px;
 }
+/* Rows and separators span the full card width. */
 .headlines > li + li {
   border-top: 0.5px solid var(--glass-separator);
-  margin-left: 20px;
-}
-.headlines > li + li .headline {
-  padding-left: 0;
 }
 .headline {
   display: grid;
@@ -319,8 +316,496 @@ ul {
   flex-direction: column;
   gap: 8px;
 }
-.headlines > li + li.headline-skeleton {
-  padding-left: 0;
+
+/* Sign in */
+.signin-text {
+  color: var(--glass-text-secondary);
+  font-size: 15px;
+  margin-bottom: 14px;
+}
+.signin-error {
+  color: var(--glass-text-secondary);
+  font-size: 15px;
+  margin: -6px 0 14px;
+}
+.signin-error::before {
+  content: '⚠︎ ';
+  color: var(--warning);
+}
+.google-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  color: #1f1f1f;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.google-button:active {
+  opacity: 0.8;
+}
+.google-button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.google-button:focus-visible,
+.text-button:focus-visible {
+  outline: 2px solid var(--glass-accent);
+  outline-offset: 2px;
+}
+.text-button {
+  align-self: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  background: none;
+  color: rgba(255, 255, 255, 0.75);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.4);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+}
+.text-button:active {
+  opacity: 0.6;
+}
+
+.card-empty {
+  color: var(--glass-text-secondary);
+  font-size: 15px;
+}
+
+/* Inbox */
+.email {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 12px;
+  row-gap: 2px;
+  align-items: baseline;
+  width: 100%;
+  min-height: 44px;
+  padding: 12px 20px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.headlines > li:last-child .email {
+  border-radius: 0 0 var(--glass-radius) var(--glass-radius);
+}
+.email:active {
+  background: var(--glass-pressed);
+}
+@media (hover: hover) {
+  .email:hover {
+    background: var(--glass-pressed);
+  }
+}
+.email:focus-visible {
+  outline: 2px solid var(--glass-accent);
+  outline-offset: -2px;
+}
+.email-from {
+  font-size: 17px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.email-time {
+  color: var(--glass-text-secondary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.email-subject,
+.email-snippet {
+  grid-column: 1 / -1;
+  overflow: hidden;
+}
+.email-subject {
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.email-snippet {
+  color: var(--glass-text-secondary);
+  font-size: 14px;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.email-reason {
+  grid-column: 1 / -1;
+  color: var(--glass-accent);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+/* Inbox groups (Gemini triage) */
+.inbox-status {
+  margin-bottom: 8px;
+}
+.inbox-status:empty {
+  display: none;
+}
+.inbox-group h3,
+.inbox-group-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin: 0;
+  padding: 10px 20px 8px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--glass-text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: left;
+}
+.inbox-group.is-urgent h3 {
+  color: var(--danger);
+}
+.inbox-group.is-needs_reply h3 {
+  color: var(--warning);
+}
+.inbox-group-toggle {
+  min-height: 44px;
+  cursor: pointer;
+}
+.headlines > li.inbox-group:last-child .inbox-group-toggle {
+  border-radius: 0 0 var(--glass-radius) var(--glass-radius);
+}
+.inbox-group-toggle:focus-visible {
+  outline: 2px solid var(--glass-accent);
+  outline-offset: -2px;
+}
+.inbox-group-action {
+  color: var(--glass-accent);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+
+.card-note {
+  color: var(--glass-text-secondary);
+  font-size: 13px;
+}
+.headlines + .card-note {
+  margin-top: 30px;
+}
+.card-empty + .card-note {
+  margin-top: 8px;
+}
+
+.inbox-empty {
+  padding: 4px 20px 14px;
+}
+
+/* FT */
+.ft-ai-label {
+  margin: -8px 0 10px;
+}
+.ft-ai-label::before {
+  content: '✦ ';
+  color: var(--glass-accent);
+}
+.ft-bullet {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 20px;
+}
+.ft-tag {
+  color: var(--glass-accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.ft-what {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.ft-why {
+  color: var(--glass-text-secondary);
+  font-size: 14px;
+  line-height: 1.35;
+}
+.ft-summary {
+  grid-column: 1 / -1;
+  color: var(--glass-text-secondary);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.ft-summary.is-subject {
+  color: var(--text);
+  font-size: 15px;
+}
+.ft-row.is-empty {
+  display: grid;
+  row-gap: 2px;
+  padding: 12px 20px;
+  opacity: 0.55;
+}
+.new-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  vertical-align: middle;
+}
+.alert-row {
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: baseline;
+  min-height: 0;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.alert-subject {
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+/* Deadlines */
+.deadline {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 20px;
+}
+.deadline-when {
+  color: var(--glass-accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+.deadline-when.is-soon {
+  color: var(--warning);
+}
+.deadline-title {
+  font-size: 17px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.deadline-date {
+  color: var(--glass-text-secondary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Calendar */
+.event-location {
+  display: block;
+  color: var(--glass-text-secondary);
+  font-size: 13px;
+  font-weight: 400;
+  margin-top: 2px;
+}
+.event {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: baseline;
+  padding: 12px 20px;
+}
+.event-time {
+  color: var(--glass-text-secondary);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.event-title {
+  font-size: 17px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* Email reader sheet */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.45);
+  animation: fade-in 0.3s ease-out both;
+}
+.sheet-backdrop.is-closing {
+  animation: fade-out 0.28s ease-in both;
+}
+.sheet {
+  position: absolute;
+  inset: calc(env(safe-area-inset-top) + 12px) 0 0;
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--glass-radius) var(--glass-radius) 0 0;
+  /* near-opaque glass: no blur (see --glass-backdrop note) so edges stay clean */
+  background: var(--glass-sheen), rgba(24, 24, 34, 0.94);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    inset 0 0 0 0.5px var(--glass-edge),
+    0 -8px 40px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  animation: sheet-up 0.42s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.sheet.is-closing {
+  animation: sheet-down 0.28s cubic-bezier(0.4, 0, 1, 1) both;
+}
+.sheet-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px 0 20px;
+}
+.sheet-gmail {
+  color: var(--glass-accent);
+  font-size: 15px;
+  text-decoration: none;
+  padding: 10px 0;
+}
+.sheet-gmail:focus-visible,
+.sheet-close:focus-visible {
+  outline: 2px solid var(--glass-accent);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+.sheet-close {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.sheet-close:focus-visible {
+  border-radius: 50%;
+}
+.sheet-header {
+  padding: 8px 20px 14px;
+  border-bottom: 0.5px solid var(--glass-separator);
+}
+.sheet-from {
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.sheet-address {
+  color: var(--glass-text-secondary);
+  font-weight: 400;
+}
+.sheet-subject {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+.sheet-date {
+  color: var(--glass-text-secondary);
+  font-size: 13px;
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.sheet-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.sheet-padded {
+  padding: 16px 20px;
+}
+.sheet-loading {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sheet-images {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 20px;
+  color: var(--glass-text-secondary);
+  font-size: 13px;
+  border-bottom: 0.5px solid var(--glass-separator);
+}
+.sheet-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 60dvh;
+  border: 0;
+  background: transparent;
+  color-scheme: dark;
+}
+.sheet-frame.is-light {
+  width: calc(100% - 24px);
+  margin: 12px;
+  border-radius: 16px;
+  background: #fff;
+  color-scheme: light;
+}
+.sheet-text {
+  padding: 16px 20px 24px;
+  font-size: 16px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.sheet-text a {
+  color: var(--glass-accent);
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translate3d(0, 100%, 0);
+  }
+}
+@keyframes sheet-down {
+  to {
+    transform: translate3d(0, 100%, 0);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
 }
 
 /* Loading */
@@ -402,7 +887,9 @@ ul {
 @media (prefers-reduced-motion: reduce) {
   body::before,
   body::after,
-  .skeleton {
+  .skeleton,
+  .sheet,
+  .sheet-backdrop {
     animation: none;
   }
 }

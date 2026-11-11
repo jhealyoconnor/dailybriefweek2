@@ -1,5 +1,9 @@
 node_modules
 dist
-public/headlines.json
 .DS_Store
 *.log
+
+# Cloudflare Worker secrets / local state
+.dev.vars*
+!.dev.vars.example
+.wrangler/

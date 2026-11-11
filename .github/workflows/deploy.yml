@@ -3,9 +3,6 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
-  schedule:
-    # Rebuild every 30 minutes so the RTÉ headlines stay fresh.
-    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 permissions:
