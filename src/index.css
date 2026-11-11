@@ -1,0 +1,408 @@
+:root {
+  --bg: #000;
+  --card: #1c1c1e;
+  --card-pressed: #2c2c2e;
+  --separator: rgba(84, 84, 88, 0.6);
+  --text: #fff;
+  --text-secondary: #8e8e93;
+  --accent: #0a84ff;
+  --warning: #ff9f0a;
+  --danger: #ff453a;
+  --radius: 20px;
+  --gutter: 16px;
+
+  /* Liquid Glass */
+  --glass-radius: 30px;
+  --glass-fill: rgba(22, 22, 34, 0.38);
+  --glass-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 38%, rgba(255, 255, 255, 0) 70%);
+  /*
+   * No blur(): the only thing behind the cards is the already-soft gradient, so
+   * blurring it looked identical, but Safari's blur samples past the window
+   * edge and drew a flickering pale haze where a card meets the screen edge.
+   * saturate() works per-pixel, so it keeps the glass tint with no edge haze.
+   */
+  --glass-backdrop: saturate(185%);
+  --glass-edge: rgba(255, 255, 255, 0.16);
+  --glass-highlight: rgba(255, 255, 255, 0.55);
+  --glass-glow: rgba(255, 255, 255, 0.07);
+  --glass-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 12px 32px rgba(8, 6, 30, 0.32);
+  --glass-pressed: rgba(255, 255, 255, 0.1);
+  --glass-separator: rgba(255, 255, 255, 0.14);
+  --glass-text-secondary: rgba(235, 235, 245, 0.74);
+  --glass-accent: #7cc6ff;
+  --glass-skeleton: rgba(255, 255, 255, 0.1);
+  --glass-skeleton-shine: rgba(255, 255, 255, 0.22);
+  --bg-base: #0a0a1c;
+
+  color-scheme: dark;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--bg-base);
+}
+
+body {
+  margin: 0;
+  color: var(--text);
+  /* transparent so the fixed gradient layers (z-index: -1) show through */
+  background: transparent;
+  min-height: 100dvh;
+  overscroll-behavior-y: none;
+}
+
+/*
+ * Animated gradient background: two oversized fixed layers of colour blobs
+ * drifting in opposite directions. Only `transform` animates, so the motion
+ * stays on the GPU compositor (smooth on iPhone). Layers are larger than the
+ * viewport so no edge shows while drifting or behind Safari's toolbars.
+ */
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  inset: -30%;
+  z-index: -1;
+  pointer-events: none;
+  will-change: transform;
+}
+
+body::before {
+  background:
+    radial-gradient(38% 32% at 22% 24%, rgba(94, 92, 230, 0.9), transparent 70%),
+    radial-gradient(34% 30% at 80% 18%, rgba(255, 55, 95, 0.7), transparent 70%),
+    radial-gradient(40% 34% at 70% 72%, rgba(100, 210, 255, 0.6), transparent 70%),
+    radial-gradient(36% 30% at 24% 82%, rgba(191, 90, 242, 0.75), transparent 70%),
+    var(--bg-base);
+  animation: drift-a 26s ease-in-out infinite alternate;
+}
+
+body::after {
+  background:
+    radial-gradient(30% 26% at 62% 42%, rgba(255, 159, 10, 0.45), transparent 70%),
+    radial-gradient(28% 24% at 36% 58%, rgba(48, 209, 88, 0.3), transparent 70%),
+    /* gentle dark scrim keeps white text readable over bright patches */
+    linear-gradient(180deg, rgba(0, 0, 0, 0.22), rgba(0, 0, 0, 0.32));
+  animation: drift-b 34s ease-in-out infinite alternate;
+}
+
+@keyframes drift-a {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+  }
+  50% {
+    transform: translate3d(6%, -4%, 0) rotate(10deg) scale(1.08);
+  }
+  100% {
+    transform: translate3d(-5%, 5%, 0) rotate(-6deg) scale(1.04);
+  }
+}
+
+@keyframes drift-b {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(-7%, 5%, 0) rotate(-12deg);
+  }
+  100% {
+    transform: translate3d(5%, -6%, 0) rotate(8deg);
+  }
+}
+
+h1,
+h2,
+p,
+ol,
+ul {
+  margin: 0;
+  padding: 0;
+}
+
+.app {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: calc(env(safe-area-inset-top) + 24px) calc(env(safe-area-inset-right) + var(--gutter))
+    calc(env(safe-area-inset-bottom) + 24px) calc(env(safe-area-inset-left) + var(--gutter));
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Greeting (sits directly on the gradient, so it gets a soft shadow for contrast) */
+.greeting {
+  padding: 8px 4px 4px;
+  text-shadow: 0 1px 14px rgba(0, 0, 0, 0.35);
+}
+.greeting-date {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 15px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.greeting-title {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin-top: 4px;
+}
+.greeting-note {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 15px;
+  margin-top: 4px;
+}
+
+/* Cards — solid fallback first; glass applied below where supported */
+.card {
+  position: relative;
+  background: var(--card);
+  border-radius: var(--glass-radius);
+  padding: 18px 20px;
+  box-shadow: var(--glass-shadow);
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .card {
+    background: var(--glass-sheen), var(--glass-fill);
+    -webkit-backdrop-filter: var(--glass-backdrop);
+    backdrop-filter: var(--glass-backdrop);
+    /* bright top edge, hairline rim, inner glow, soft drop shadow */
+    box-shadow:
+      inset 0 1px 0 var(--glass-highlight),
+      inset 0 0 0 0.5px var(--glass-edge),
+      inset 0 0 28px var(--glass-glow),
+      var(--glass-shadow);
+    isolation: isolate;
+  }
+
+  /* specular highlight along the top edge, fading out toward the corners */
+  .card::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: var(--glass-radius);
+    right: var(--glass-radius);
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.9), transparent);
+    pointer-events: none;
+  }
+}
+
+/* Respect "Reduce Transparency" where the browser exposes it */
+@media (prefers-reduced-transparency: reduce) {
+  .card {
+    background: var(--card);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .card::after {
+    display: none;
+  }
+}
+
+.card-label {
+  color: var(--glass-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 12px;
+}
+
+/* Weather */
+.weather {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.weather-temp {
+  font-size: 64px;
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.weather-condition {
+  font-size: 20px;
+  font-weight: 600;
+  margin-top: 6px;
+}
+.weather-range {
+  color: var(--glass-text-secondary);
+  font-size: 15px;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.weather-icon {
+  font-size: 64px;
+  line-height: 1;
+  filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.25));
+}
+
+/* Headlines */
+.headlines {
+  list-style: none;
+  margin: 0 -20px -18px;
+}
+.headlines > li + li {
+  border-top: 0.5px solid var(--glass-separator);
+  margin-left: 20px;
+}
+.headlines > li + li .headline {
+  padding-left: 0;
+}
+.headline {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 12px;
+  row-gap: 4px;
+  align-items: center;
+  min-height: 44px;
+  padding: 14px 20px;
+  color: var(--text);
+  text-decoration: none;
+  transition: background-color 0.15s;
+}
+.headlines > li:last-child .headline {
+  border-radius: 0 0 var(--glass-radius) var(--glass-radius);
+}
+.headline:active {
+  background: var(--glass-pressed);
+}
+@media (hover: hover) {
+  .headline:hover {
+    background: var(--glass-pressed);
+  }
+}
+.headline:focus-visible {
+  outline: 2px solid var(--glass-accent);
+  outline-offset: -2px;
+}
+.headline-meta {
+  grid-column: 1;
+  display: flex;
+  gap: 8px;
+  color: var(--glass-text-secondary);
+  font-size: 13px;
+}
+.headline-category {
+  color: var(--glass-accent);
+  font-weight: 600;
+}
+.headline-title {
+  grid-column: 1;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.chevron {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 24px;
+}
+.headline-skeleton {
+  padding: 14px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.headlines > li + li.headline-skeleton {
+  padding-left: 0;
+}
+
+/* Loading */
+.skeleton {
+  border-radius: 8px;
+  background: linear-gradient(
+    90deg,
+    var(--glass-skeleton) 25%,
+    var(--glass-skeleton-shine) 50%,
+    var(--glass-skeleton) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+.skeleton-line {
+  height: 14px;
+}
+.skeleton-title {
+  height: 34px;
+  margin-top: 10px;
+}
+.skeleton-temp {
+  width: 110px;
+  height: 64px;
+  margin-bottom: 12px;
+}
+.skeleton-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+}
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* Error */
+.card-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--glass-text-secondary);
+  font-size: 15px;
+}
+.card-error p::before {
+  content: '⚠︎ ';
+  color: var(--warning);
+}
+.retry-button {
+  flex-shrink: 0;
+  min-height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), inset 0 0 0 0.5px rgba(255, 255, 255, 0.18);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.retry-button:active {
+  opacity: 0.7;
+}
+
+.footer {
+  color: rgba(255, 255, 255, 0.6);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.4);
+  font-size: 12px;
+  text-align: center;
+  padding-top: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before,
+  body::after,
+  .skeleton {
+    animation: none;
+  }
+}
