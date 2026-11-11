@@ -1,12 +1,17 @@
 import { useFetch } from '../hooks/useFetch'
+import { describeCode } from '../weather/codes'
+import type { HourlyInput } from '../weather/hourly'
 import { CardError } from './CardError'
+import { HourlyBar } from './HourlyBar'
 
+// forecast_days=2 so the bar can run into tomorrow morning late in the evening.
 const WEATHER_URL =
   'https://api.open-meteo.com/v1/forecast' +
   '?latitude=53.3498&longitude=-6.2603' +
   '&current=temperature_2m,apparent_temperature,weather_code,is_day' +
-  '&daily=temperature_2m_max,temperature_2m_min' +
-  '&timezone=Europe%2FDublin&forecast_days=1'
+  '&hourly=temperature_2m,weather_code,precipitation_probability,is_day' +
+  '&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset' +
+  '&timezone=Europe%2FDublin&forecast_days=2'
 
 type Weather = {
   temperature: number
@@ -15,43 +20,65 @@ type Weather = {
   isDay: boolean
   high: number
   low: number
+  /** null if the hourly part of the response is missing or malformed (the card still shows). */
+  hourly: HourlyInput | null
+}
+
+type Raw = {
+  current?: { time?: string; temperature_2m?: number; apparent_temperature?: number; weather_code?: number; is_day?: number }
+  hourly?: {
+    time?: string[]
+    temperature_2m?: (number | null)[]
+    weather_code?: (number | null)[]
+    precipitation_probability?: (number | null)[]
+    is_day?: (number | null)[]
+  }
+  daily?: { temperature_2m_max?: number[]; temperature_2m_min?: number[]; sunrise?: string[]; sunset?: string[] }
+}
+
+function parseHourly(j: Raw, current: { temp: number; code: number; isDay: boolean }): HourlyInput | null {
+  const h = j.hourly
+  const now = j.current?.time
+  const time = h?.time
+  if (!h || !now || !Array.isArray(time) || time.length === 0) return null
+  const n = time.length
+  const nums = (a: unknown) => Array.isArray(a) && a.length === n
+  if (!nums(h.temperature_2m) || !nums(h.weather_code) || !nums(h.is_day)) return null
+  // Hours with missing temperature/code can't be shown; drop the bar rather than show gaps.
+  if (h.temperature_2m!.some((v) => v == null) || h.weather_code!.some((v) => v == null)) return null
+  return {
+    now,
+    current,
+    hourly: {
+      time,
+      temp: h.temperature_2m as number[],
+      code: h.weather_code as number[],
+      rain: nums(h.precipitation_probability) ? h.precipitation_probability! : time.map(() => null),
+      isDay: h.is_day!.map((v) => v !== 0),
+    },
+    sunrise: j.daily?.sunrise ?? [],
+    sunset: j.daily?.sunset ?? [],
+  }
 }
 
 function parseWeather(json: unknown): Weather {
-  const j = json as {
-    current?: { temperature_2m?: number; apparent_temperature?: number; weather_code?: number; is_day?: number }
-    daily?: { temperature_2m_max?: number[]; temperature_2m_min?: number[] }
-  }
+  const j = json as Raw
   const c = j.current
   const high = j.daily?.temperature_2m_max?.[0]
   const low = j.daily?.temperature_2m_min?.[0]
   if (!c || c.temperature_2m == null || c.weather_code == null || high == null || low == null) {
     throw new Error('Unexpected weather data')
   }
+  const isDay = c.is_day !== 0
   return {
     temperature: c.temperature_2m,
     feelsLike: c.apparent_temperature ?? c.temperature_2m,
     code: c.weather_code,
-    isDay: c.is_day !== 0,
+    isDay,
     high,
     low,
+    hourly: parseHourly(j, { temp: c.temperature_2m, code: c.weather_code, isDay }),
   }
-}
-
-// WMO weather interpretation codes, as used by Open-Meteo.
-function describeCode(code: number, isDay: boolean): { label: string; icon: string } {
-  if (code === 0) return { label: 'Clear', icon: isDay ? '☀️' : '🌙' }
-  if (code === 1) return { label: 'Mostly clear', icon: isDay ? '🌤️' : '🌙' }
-  if (code === 2) return { label: 'Partly cloudy', icon: isDay ? '⛅️' : '☁️' }
-  if (code === 3) return { label: 'Overcast', icon: '☁️' }
-  if (code === 45 || code === 48) return { label: 'Fog', icon: '🌫️' }
-  if (code >= 51 && code <= 57) return { label: 'Drizzle', icon: '🌦️' }
-  if (code >= 61 && code <= 67) return { label: code >= 65 ? 'Heavy rain' : 'Rain', icon: '🌧️' }
-  if (code >= 71 && code <= 77) return { label: 'Snow', icon: '🌨️' }
-  if (code >= 80 && code <= 82) return { label: 'Showers', icon: '🌦️' }
-  if (code === 85 || code === 86) return { label: 'Snow showers', icon: '🌨️' }
-  if (code >= 95) return { label: 'Thunderstorms', icon: '⛈️' }
-  return { label: 'Unknown', icon: '🌡️' }
 }
 
 const deg = (n: number) => `${Math.round(n)}°`
@@ -66,17 +93,24 @@ export function WeatherCard() {
       </h2>
 
       {loading && !data ? (
-        <div className="weather" aria-busy="true">
-          <div>
-            <div className="skeleton skeleton-temp" />
-            <div className="skeleton skeleton-line" style={{ width: '60%' }} />
+        <div aria-busy="true">
+          <div className="weather">
+            <div>
+              <div className="skeleton skeleton-temp" />
+              <div className="skeleton skeleton-line" style={{ width: '60%' }} />
+            </div>
+            <div className="skeleton skeleton-icon" />
           </div>
-          <div className="skeleton skeleton-icon" />
+          <div className="skeleton skeleton-line hourly-skeleton-summary" />
+          <div className="skeleton hourly-skeleton-strip" />
         </div>
       ) : error && !data ? (
         <CardError message="Couldn't load the weather." onRetry={retry} />
       ) : data ? (
-        <WeatherBody weather={data} />
+        <>
+          <WeatherBody weather={data} />
+          {data.hourly && <HourlyBar weather={data.hourly} />}
+        </>
       ) : null}
     </section>
   )
