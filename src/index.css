@@ -251,6 +251,106 @@ ul {
   filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.25));
 }
 
+/* Hourly bar */
+.hourly {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 0.5px solid var(--glass-separator);
+}
+.hourly-summary {
+  color: var(--glass-text-secondary);
+  font-size: 15px;
+  line-height: 1.35;
+  margin-bottom: 8px;
+}
+.hourly-strip {
+  display: flex;
+  gap: 4px;
+  list-style: none;
+  /* bleed to the card's edges so items scroll under the fade */
+  margin: 0 -20px -6px;
+  padding: 4px 20px 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 20px;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
+  scrollbar-width: none;
+  /* soft fade at both edges */
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 20px, #000 calc(100% - 28px), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 20px, #000 calc(100% - 28px), transparent 100%);
+}
+.hourly-strip::-webkit-scrollbar {
+  display: none;
+}
+.hourly-strip:focus-visible {
+  outline: 2px solid var(--glass-accent);
+  outline-offset: -2px;
+  border-radius: 12px;
+}
+.hour {
+  flex: 0 0 auto;
+  min-width: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 6px;
+  border-radius: 18px;
+  scroll-snap-align: start;
+}
+.hour.is-now {
+  background: var(--glass-pressed);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), inset 0 0 0 0.5px rgba(255, 255, 255, 0.14);
+}
+.hour-time {
+  color: var(--glass-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.hour.is-now .hour-time {
+  color: var(--text);
+  font-weight: 700;
+}
+.hour-icon {
+  font-size: 24px;
+  line-height: 1;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.25));
+}
+.hour-temp {
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.hour-sun-label {
+  color: var(--glass-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 23px; /* same row height as .hour-temp */
+}
+.hour-rain {
+  min-height: 14px; /* reserved even when empty so every column lines up */
+  color: #64d2ff;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.hourly-strip.no-rain .hour-rain {
+  display: none;
+}
+.hourly-skeleton-summary {
+  width: 70%;
+  margin-top: 22px;
+}
+.hourly-skeleton-strip {
+  height: 92px;
+  margin-top: 12px;
+  border-radius: 18px;
+}
+
 /* Headlines */
 .headlines {
   list-style: none;
