@@ -4,6 +4,7 @@
  * and never logs what it read.
  */
 import { classifyFtEmail, isFtAddress } from '../../../shared/ftClassify';
+import { resolveSender, stripForwardedHeader } from '../../../shared/forwarded';
 import { extractBody, getHeader, type Header, type MimePart } from '../../../shared/mime';
 import { decodeHtmlEntities, htmlToPlainText, tidy, trimNewsletter } from '../../../shared/text';
 import { describeCode } from '../../../shared/weatherCodes';
@@ -41,7 +42,7 @@ export const TOOL_DECLARATIONS = [
 	{
 		name: 'get_emails',
 		description:
-			"Search the user's Gmail. Returns sender, subject, date, a short snippet and whether it's unread — never full bodies. Uses Gmail search syntax, e.g. 'is:unread in:inbox', 'from:alice newer_than:7d'. FT newsletters are excluded unless the query mentions FT.",
+			"Search the user's Gmail. Returns sender, subject, date, a short snippet and whether it's unread — never full bodies. Uses Gmail search syntax, e.g. 'is:unread in:inbox', 'alice newer_than:7d'. The user's mail is forwarded from their university account, so 'from:' matches the forwarding address, not the real sender: search a person or organisation by name or address as plain words instead (e.g. 'Murphy' not 'from:Murphy'). Results show the real sender. FT newsletters are excluded unless the query mentions FT.",
 		parameters: {
 			type: 'object',
 			properties: {
@@ -121,6 +122,22 @@ function parseFrom(from: string): { name: string; address: string } {
 	return m ? { name: m[1].trim() || m[2].trim(), address: m[2].trim() } : { name: from.trim(), address: from.trim() };
 }
 
+/**
+ * Real sender, subject and snippet. Mail arrives forwarded from Outlook (Gmail's sender is the
+ * tcd.ie forwarder), so the original sender is read from the forward block the snippet starts with.
+ */
+function senderOf(m: MessageMeta): { name: string; address: string; subject: string; snippet: string } {
+	const from = parseFrom(getHeader(m.payload?.headers, 'From'));
+	const snippet = decodeHtmlEntities(m.snippet ?? '');
+	const real = resolveSender({ from: from.name, fromAddress: from.address, subject: getHeader(m.payload?.headers, 'Subject').trim() || '(no subject)' }, snippet);
+	return {
+		name: real.from,
+		address: real.fromAddress,
+		subject: real.subject,
+		snippet: real.forwarded ? stripForwardedHeader(snippet, real.subject) : snippet,
+	};
+}
+
 // ---- Tools ----
 
 async function getCalendar(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
@@ -178,21 +195,23 @@ async function getEmails(args: Record<string, unknown>, ctx: ToolContext): Promi
 	if (!query) throw new ToolInputError('"query" is required, e.g. "is:unread in:inbox".');
 	const max = Math.min(20, Math.max(1, Math.round(Number(args.max) || 10)));
 	const wantsFt = /\bft\b|ft\.com|financial times/i.test(query);
-	const messages = await searchMessages(wantsFt ? query : `${query} -from:ft.com`, max, ctx);
+	// Forwarded FT mail can't be excluded by the search itself, so fetch extra and filter after.
+	const messages = await searchMessages(wantsFt ? query : `${query} -from:ft.com`, wantsFt ? max : Math.min(20, max * 2), ctx);
 	const emails = messages
 		.map((m) => {
-			const from = parseFrom(getHeader(m.payload?.headers, 'From'));
+			const s = senderOf(m);
 			const date = receivedAt(m);
 			return {
-				from: from.name === from.address ? from.address : `${from.name} <${from.address}>`,
-				address: from.address,
-				subject: getHeader(m.payload?.headers, 'Subject').trim() || '(no subject)',
+				from: s.name === s.address ? s.address : `${s.name} <${s.address}>`,
+				address: s.address,
+				subject: s.subject,
 				date: date ? `${formatShortDay(date)}, ${formatClock(date)}` : '',
-				snippet: decodeHtmlEntities(m.snippet ?? '').slice(0, 300),
+				snippet: s.snippet.slice(0, 300),
 				unread: m.labelIds?.includes('UNREAD') ?? false,
 			};
 		})
 		.filter((e) => wantsFt || !isFtAddress(e.address))
+		.slice(0, max)
 		.map(({ address: _address, ...e }) => e);
 	return { query, emails, count: emails.length };
 }
@@ -258,13 +277,13 @@ async function getFtBriefing(_args: Record<string, unknown>, ctx: ToolContext): 
 	// Same selection as the app's FT cards: newsletter issues since 06:00 yesterday (Dublin).
 	const [y, m, d] = dublinDateKey(ctx.now).split('-').map(Number);
 	const since = dublinLocal(y, m, d - 1, 6);
-	const metas = await searchMessages('from:ft.com newer_than:3d', 40, ctx);
+	// Same search as the app: FT mail arrives forwarded, so match the text as well as the sender.
+	const metas = await searchMessages('(from:ft.com OR "ft.com" OR "Financial Times") newer_than:3d', 60, ctx);
 	const recent = metas
 		.map((meta) => {
-			const from = parseFrom(getHeader(meta.payload?.headers, 'From'));
-			const subject = getHeader(meta.payload?.headers, 'Subject');
-			const kind = classifyFtEmail({ from: from.name, fromAddress: from.address, subject });
-			return { meta, subject, received: receivedAt(meta), newsletter: kind.kind === 'newsletter' ? kind.name : null };
+			const s = senderOf(meta);
+			const kind = classifyFtEmail({ from: s.name, fromAddress: s.address, subject: s.subject });
+			return { meta, subject: s.subject, received: receivedAt(meta), newsletter: kind.kind === 'newsletter' ? kind.name : null };
 		})
 		.filter((x) => x.newsletter && x.received && x.received >= since)
 		.slice(0, 12);
@@ -275,7 +294,8 @@ async function getFtBriefing(_args: Record<string, unknown>, ctx: ToolContext): 
 		const body = await extractBody(msg.payload, async (attachmentId) =>
 			(await google<{ data?: string }>(`${GMAIL}/messages/${x.meta.id}/attachments/${attachmentId}`, ctx)).data,
 		);
-		const text = body.html ? htmlToPlainText(body.html) : tidy(body.text ?? '');
+		// Drop Outlook's forward block (the user's name and tcd address) before it goes to Gemini.
+		const text = stripForwardedHeader(body.html ? htmlToPlainText(body.html) : tidy(body.text ?? ''), x.subject);
 		return { id: x.meta.id, newsletter: x.newsletter!, subject: x.subject, received: x.received!.toISOString(), text: trimNewsletter(text || x.meta.snippet || '') };
 	});
 	const withText = issues.filter((i) => i.text);

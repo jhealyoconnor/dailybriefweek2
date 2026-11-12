@@ -3,6 +3,7 @@ import { classifyFtEmail } from '../../shared/ftClassify'
 import { FT_NEWSLETTERS } from '../config'
 import { dublinYesterdayMorning, isDublinToday } from './dublinTime'
 import { loadAccountEmail, loadMessageBody, mapLimit, searchEmails, type EmailSummary } from './gmail'
+import { stripForwardedHeader } from '../../shared/forwarded'
 import { htmlToText, tidy, trimNewsletter } from './htmlText'
 
 export type FtNewsletter = { name: string; issues: EmailSummary[] } // issues newest first
@@ -13,8 +14,11 @@ export type FtData = {
   other: EmailSummary[] // FT emails matching no newsletter and not alerts
 }
 
-const FT_QUERY = 'from:ft.com newer_than:7d'
-const FT_MAX = 60
+// FT mail arrives forwarded from Outlook, so Gmail's sender is the tcd.ie forwarder, not ft.com.
+// Search the text too ("ft.com" appears in the forward block's From line), then keep only emails
+// whose real sender — read from the forward block — is at ft.com (see classifyFtEmail).
+export const FT_QUERY = '(from:ft.com OR "ft.com" OR "Financial Times") newer_than:7d'
+const FT_MAX = 80
 
 export function classifyFt(emails: EmailSummary[]): Omit<FtData, 'account'> {
   const byName = new Map<string, EmailSummary[]>(FT_NEWSLETTERS.map((n) => [n.name, []]))
@@ -74,7 +78,8 @@ export async function loadFtDigest(data: FtData, token: string, signal: AbortSig
 
   const issues = await mapLimit(recent, 3, async ({ newsletter, email }) => {
     const body = await loadMessageBody(email.id, token, signal)
-    const text = body.html ? htmlToText(body.html) : tidy(body.text ?? '')
+    // Drop Outlook's forward block: it holds my name and tcd address, which Gemini doesn't need.
+    const text = stripForwardedHeader(body.html ? htmlToText(body.html) : tidy(body.text ?? ''), email.subject)
     return {
       id: email.id,
       newsletter,

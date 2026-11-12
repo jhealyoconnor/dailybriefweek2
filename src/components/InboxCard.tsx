@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { workerFetch } from '../api/worker'
 import { formatReceived } from '../google/dublinTime'
-import { isFtAddress, loadAccountEmail, searchEmails, type EmailSummary } from '../google/gmail'
+import { isFtAddress, loadAccountEmail, mapLimit, searchEmails, withForwardedBody, type EmailSummary } from '../google/gmail'
 import { useGoogleQuery } from '../hooks/useGoogleQuery'
 import { markViewed, useViewedEmails } from '../viewedEmails'
 import { CardError } from './CardError'
@@ -10,15 +10,22 @@ import { EmailSheet } from './EmailSheet'
 type Email = EmailSummary
 type Inbox = { account: string; emails: Email[] }
 
-// FT mail has its own cards, so it's kept out of the inbox and out of triage.
+// FT mail has its own cards, so it's kept out of the inbox and out of triage. Forwarded FT mail
+// can't be excluded by the search (Gmail sees the tcd.ie forwarder as the sender), so extra
+// messages are fetched and FT is filtered out after reading each one's real sender.
 const INBOX_QUERY = 'is:unread in:inbox -from:ft.com'
+const INBOX_SIZE = 10
+const INBOX_FETCH = 25
 
 async function loadInbox(token: string, signal: AbortSignal): Promise<Inbox> {
   const [emails, account] = await Promise.all([
-    searchEmails(INBOX_QUERY, 10, token, signal),
+    searchEmails(INBOX_QUERY, INBOX_FETCH, token, signal),
     loadAccountEmail(token, signal),
   ])
-  return { account, emails: emails.filter((e) => !isFtAddress(e.fromAddress)) }
+  const shown = emails.filter((e) => !isFtAddress(e.fromAddress)).slice(0, INBOX_SIZE)
+  // Forwarded emails: read the body for the real sender and a proper preview (≤10 bodies).
+  const resolved = await mapLimit(shown, 4, (e) => withForwardedBody(e, token, signal))
+  return { account, emails: resolved.filter((e) => !isFtAddress(e.fromAddress)) }
 }
 
 export function InboxCard({ token }: { token: string }) {

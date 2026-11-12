@@ -1,6 +1,8 @@
+import { isForwarder, parseForwardedHeader, resolveSender, stripForwardedHeader } from '../../shared/forwarded'
 import { isFtAddress } from '../../shared/ftClassify'
 import { extractBody, getHeader, type Header, type MessageBody, type MimePart } from '../../shared/mime'
 import { googleFetch } from './googleFetch'
+import { htmlToText, tidy } from './htmlText'
 
 export { getHeader, isFtAddress, type Header, type MessageBody }
 
@@ -36,6 +38,11 @@ export type EmailSummary = {
   subject: string
   snippet: string
   received: Date | null
+  /**
+   * Arrived via the Outlook forward (Gmail sender is a tcd.ie address). from/subject are then the
+   * original sender's, read from the forward block, when that block could be read.
+   */
+  forwarded: boolean
 }
 
 type MessageMeta = {
@@ -53,14 +60,40 @@ function toEmailSummary(m: MessageMeta): EmailSummary {
     received = m.internalDate ? new Date(Number(m.internalDate)) : null
   }
   const sender = parseAddress(header('From'))
+  const snippet = decodeEntities(m.snippet ?? '')
+  // Forwarded Trinity mail: Gmail's sender is the tcd.ie forwarder; the snippet starts with
+  // Outlook's "From: … Sent: …" block, which names the real sender.
+  const real = resolveSender(
+    { from: sender.name, fromAddress: sender.address, subject: header('Subject').trim() || '(no subject)' },
+    snippet,
+  )
   return {
     id: m.id,
     threadId: m.threadId,
-    from: sender.name,
-    fromAddress: sender.address,
-    subject: header('Subject').trim() || '(no subject)',
-    snippet: decodeEntities(m.snippet ?? ''),
+    from: real.from,
+    fromAddress: real.fromAddress,
+    subject: real.subject,
+    snippet: real.forwarded ? stripForwardedHeader(snippet, real.subject) : snippet,
     received,
+    forwarded: isForwarder(sender.address),
+  }
+}
+
+/**
+ * For a forwarded email, read the body to confirm the original sender (the snippet can be cut
+ * short) and to get a real preview instead of the header block. Other emails are returned as is.
+ */
+export async function withForwardedBody(email: EmailSummary, token: string, signal: AbortSignal): Promise<EmailSummary> {
+  if (!email.forwarded) return email
+  try {
+    const body = await loadMessageBody(email.id, token, signal)
+    const text = body.html ? htmlToText(body.html) : tidy(body.text ?? '')
+    const original = parseForwardedHeader(text) // first block only, so the body can't override it
+    if (!original) return email
+    const preview = stripForwardedHeader(text, email.subject).replace(/\s+/g, ' ').trim().slice(0, 300)
+    return { ...email, from: original.from, fromAddress: original.fromAddress, snippet: preview || email.snippet }
+  } catch {
+    return email // keep what the snippet gave us
   }
 }
 
